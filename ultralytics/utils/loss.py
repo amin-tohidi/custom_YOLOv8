@@ -103,6 +103,35 @@ class KeypointLoss(nn.Module):
         return kpt_loss_factor * ((1 - torch.exp(-e)) * kpt_mask).mean()
 
 
+
+
+
+
+
+
+
+###########################################################
+########################################################
+#########################################################
+###########################################################
+
+# import torch
+
+# def sigmoid(x):
+#     return 1 / (1 + torch.exp(-x))
+
+# def custom_bce_with_logits_loss(input, target, reduction='none'):
+#     prob = sigmoid(input)
+#     loss = - (target * torch.log(prob + 1e-7) + (1 - target) * torch.log(1 - prob + 1e-7))
+    
+#     if reduction == 'mean':
+#         return loss.mean()
+#     elif reduction == 'sum':
+#         return loss.sum()
+#     else:
+#         return loss
+
+######################################################################
 # Criterion class for computing Detection training losses
 class v8DetectionLoss:
 
@@ -112,19 +141,29 @@ class v8DetectionLoss:
         h = model.args  # hyperparameters
 
         m = model.model[-1]  # Detect() module
-        self.bce = nn.BCEWithLogitsLoss(reduction='none')
         self.hyp = h
         self.stride = m.stride  # model strides
         self.nc = m.nc  # number of classes
         self.no = m.no
         self.reg_max = m.reg_max
         self.device = device
-
         self.use_dfl = m.reg_max > 1
-
         self.assigner = TaskAlignedAssigner(topk=10, num_classes=self.nc, alpha=0.5, beta=6.0)
         self.bbox_loss = BboxLoss(m.reg_max - 1, use_dfl=self.use_dfl).to(device)
         self.proj = torch.arange(m.reg_max, dtype=torch.float, device=device)
+
+    def sigmoid(self, x):
+        return 1 / (1 + torch.exp(-x))
+
+    def custom_bce_with_logits_loss(self, input, target, reduction='none'):
+        prob = self.sigmoid(input)
+        loss = - (target * torch.log(prob + 1e-7) + (1 - target) * torch.log(1 - prob + 1e-7))
+        if reduction == 'mean':
+            return loss.mean()
+        elif reduction == 'sum':
+            return loss.sum()
+        else:
+            return loss
 
     def preprocess(self, targets, batch_size, scale_tensor):
         """Preprocesses the target counts and matches with the input batch size to output a tensor."""
@@ -183,8 +222,7 @@ class v8DetectionLoss:
         target_scores_sum = max(target_scores.sum(), 1)
 
         # cls loss
-        # loss[1] = self.varifocal_loss(pred_scores, target_scores, target_labels) / target_scores_sum  # VFL way
-        loss[1] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
+        loss[1] = self.custom_bce_with_logits_loss(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum
 
         # bbox loss
         if fg_mask.sum():
@@ -197,6 +235,7 @@ class v8DetectionLoss:
         loss[2] *= self.hyp.dfl  # dfl gain
 
         return loss.sum() * batch_size, loss.detach()  # loss(box, cls, dfl)
+
 
 
 # Criterion class for computing training losses
