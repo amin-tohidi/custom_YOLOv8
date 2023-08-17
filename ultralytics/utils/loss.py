@@ -114,15 +114,14 @@ class KeypointLoss(nn.Module):
 ########################################################
 #########################################################
 ###########################################################
+# def custom_bce_with_logits_loss_mse_inspired(input, target, reduction='none'):
+#     # Inner sigmoid function
+#     def sigmoid(x):
+#         return 1 / (1 + torch.exp(-x))
 
-# import torch
-
-# def sigmoid(x):
-#     return 1 / (1 + torch.exp(-x))
-
-# def custom_bce_with_logits_loss(input, target, reduction='none'):
 #     prob = sigmoid(input)
-#     loss = - (target * torch.log(prob + 1e-7) + (1 - target) * torch.log(1 - prob + 1e-7))
+#     mse_influence = (target - prob) ** 2
+#     loss = - (target * torch.log(prob + 1e-7) + (1 - target) * torch.log(1 - prob + 1e-7)) * mse_influence
     
 #     if reduction == 'mean':
 #         return loss.mean()
@@ -131,19 +130,22 @@ class KeypointLoss(nn.Module):
 #     else:
 #         return loss
 
+
+
 ######################################################################
 # Criterion class for computing Detection training losses
+import torch
+
 class v8DetectionLoss:
 
-    def __init__(self, model):  # model must be de-paralleled
+    def __init__(self, model):
+        device = next(model.parameters()).device
+        h = model.args
 
-        device = next(model.parameters()).device  # get model device
-        h = model.args  # hyperparameters
-
-        m = model.model[-1]  # Detect() module
+        m = model.model[-1]
         self.hyp = h
-        self.stride = m.stride  # model strides
-        self.nc = m.nc  # number of classes
+        self.stride = m.stride
+        self.nc = m.nc
         self.no = m.no
         self.reg_max = m.reg_max
         self.device = device
@@ -151,17 +153,15 @@ class v8DetectionLoss:
         self.assigner = TaskAlignedAssigner(topk=10, num_classes=self.nc, alpha=0.5, beta=6.0)
         self.bbox_loss = BboxLoss(m.reg_max - 1, use_dfl=self.use_dfl).to(device)
         self.proj = torch.arange(m.reg_max, dtype=torch.float, device=device)
-#################################################################
-###############################################################
-##############################################################
-    def custom_bce_with_logits_loss(input, target, reduction='none'):
-        # Inner sigmoid function
+
+    def custom_bce_with_logits_loss_mse_inspired(self, input, target, reduction='none'):
         def sigmoid(x):
             return 1 / (1 + torch.exp(-x))
 
         prob = sigmoid(input)
-        loss = - (target * torch.log(prob + 1e-7) + (1 - target) * torch.log(1 - prob + 1e-7))
-        
+        mse_influence = (target - prob) ** 2
+        loss = - (target * torch.log(prob + 1e-7) + (1 - target) * torch.log(1 - prob + 1e-7)) * mse_influence
+
         if reduction == 'mean':
             return loss.mean()
         elif reduction == 'sum':
@@ -169,9 +169,6 @@ class v8DetectionLoss:
         else:
             return loss
 
-#################################################################
-###############################################################
-##############################################################
     def preprocess(self, targets, batch_size, scale_tensor):
         """Preprocesses the target counts and matches with the input batch size to output a tensor."""
         if targets.shape[0] == 0:
@@ -188,7 +185,6 @@ class v8DetectionLoss:
                     out[j, :n] = targets[matches, 1:]
             out[..., 1:5] = xywh2xyxy(out[..., 1:5].mul_(scale_tensor))
         return out
-
     def bbox_decode(self, anchor_points, pred_dist):
         """Decode predicted object bounding box coordinates from anchor points and distribution."""
         if self.use_dfl:
@@ -229,7 +225,7 @@ class v8DetectionLoss:
         target_scores_sum = max(target_scores.sum(), 1)
 
         # cls loss
-        loss[1] = self.custom_bce_with_logits_loss(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum
+        loss[1] = self.custom_bce_with_logits_loss_mse_inspired(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum
 
         # bbox loss
         if fg_mask.sum():
@@ -242,7 +238,6 @@ class v8DetectionLoss:
         loss[2] *= self.hyp.dfl  # dfl gain
 
         return loss.sum() * batch_size, loss.detach()  # loss(box, cls, dfl)
-
 
 
 # Criterion class for computing training losses
