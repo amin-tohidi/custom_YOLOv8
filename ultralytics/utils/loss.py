@@ -114,15 +114,14 @@ class KeypointLoss(nn.Module):
 ########################################################
 #########################################################
 ###########################################################
+# def custom_bce_with_logits_loss_mse_inspired(input, target, reduction='none'):
+#     # Inner sigmoid function
+#     def sigmoid(x):
+#         return 1 / (1 + torch.exp(-x))
 
-# import torch
-
-# def sigmoid(x):
-#     return 1 / (1 + torch.exp(-x))
-
-# def custom_bce_with_logits_loss(input, target, reduction='none'):
 #     prob = sigmoid(input)
-#     loss = - (target * torch.log(prob + 1e-7) + (1 - target) * torch.log(1 - prob + 1e-7))
+#     mse_influence = (target - prob) ** 2
+#     loss = - (target * torch.log(prob + 1e-7) + (1 - target) * torch.log(1 - prob + 1e-7)) * mse_influence
     
 #     if reduction == 'mean':
 #         return loss.mean()
@@ -130,6 +129,8 @@ class KeypointLoss(nn.Module):
 #         return loss.sum()
 #     else:
 #         return loss
+
+
 
 ######################################################################
 # Criterion class for computing Detection training losses
@@ -151,13 +152,18 @@ class v8DetectionLoss:
         self.assigner = TaskAlignedAssigner(topk=10, num_classes=self.nc, alpha=0.5, beta=6.0)
         self.bbox_loss = BboxLoss(m.reg_max - 1, use_dfl=self.use_dfl).to(device)
         self.proj = torch.arange(m.reg_max, dtype=torch.float, device=device)
+#################################################################
+###############################################################
+##############################################################
+    def custom_bce_with_logits_loss_mse_inspired(input, target, reduction='none'):
+        # Inner sigmoid function
+        def sigmoid(x):
+            return 1 / (1 + torch.exp(-x))
 
-    def sigmoid(self, x):
-        return 1 / (1 + torch.exp(-x))
-
-    def custom_bce_with_logits_loss(self, input, target, reduction='none'):
-        prob = self.sigmoid(input)
-        loss = - (target * torch.log(prob + 1e-7) + (1 - target) * torch.log(1 - prob + 1e-7))
+        prob = sigmoid(input)
+        mse_influence = (target - prob) ** 2
+        loss = - (target * torch.log(prob + 1e-7) + (1 - target) * torch.log(1 - prob + 1e-7)) * mse_influence
+        
         if reduction == 'mean':
             return loss.mean()
         elif reduction == 'sum':
@@ -165,6 +171,9 @@ class v8DetectionLoss:
         else:
             return loss
 
+#################################################################
+###############################################################
+##############################################################
     def preprocess(self, targets, batch_size, scale_tensor):
         """Preprocesses the target counts and matches with the input batch size to output a tensor."""
         if targets.shape[0] == 0:
@@ -222,7 +231,7 @@ class v8DetectionLoss:
         target_scores_sum = max(target_scores.sum(), 1)
 
         # cls loss
-        loss[1] = self.custom_bce_with_logits_loss(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum
+        loss[1] = self.custom_bce_with_logits_loss_mse_inspired(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum
 
         # bbox loss
         if fg_mask.sum():
