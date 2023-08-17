@@ -114,14 +114,15 @@ class KeypointLoss(nn.Module):
 ########################################################
 #########################################################
 ###########################################################
-# def custom_bce_with_logits_loss_mse_inspired(input, target, reduction='none'):
-#     # Inner sigmoid function
-#     def sigmoid(x):
-#         return 1 / (1 + torch.exp(-x))
 
+# import torch
+
+# def sigmoid(x):
+#     return 1 / (1 + torch.exp(-x))
+
+# def custom_bce_with_logits_loss(input, target, reduction='none'):
 #     prob = sigmoid(input)
-#     mse_influence = (target - prob) ** 2
-#     loss = - (target * torch.log(prob + 1e-7) + (1 - target) * torch.log(1 - prob + 1e-7)) * mse_influence
+#     loss = - (target * torch.log(prob + 1e-7) + (1 - target) * torch.log(1 - prob + 1e-7))
     
 #     if reduction == 'mean':
 #         return loss.mean()
@@ -129,8 +130,6 @@ class KeypointLoss(nn.Module):
 #         return loss.sum()
 #     else:
 #         return loss
-
-
 
 ######################################################################
 # Criterion class for computing Detection training losses
@@ -155,14 +154,13 @@ class v8DetectionLoss:
 #################################################################
 ###############################################################
 ##############################################################
-    def custom_bce_with_logits_loss_mse_inspired(input, target, reduction='none'):
+    def custom_bce_with_logits_loss(input, target, reduction='none'):
         # Inner sigmoid function
         def sigmoid(x):
             return 1 / (1 + torch.exp(-x))
 
         prob = sigmoid(input)
-        mse_influence = (target - prob) ** 2
-        loss = - (target * torch.log(prob + 1e-7) + (1 - target) * torch.log(1 - prob + 1e-7)) * mse_influence
+        loss = - (target * torch.log(prob + 1e-7) + (1 - target) * torch.log(1 - prob + 1e-7))
         
         if reduction == 'mean':
             return loss.mean()
@@ -231,14 +229,14 @@ class v8DetectionLoss:
         target_scores_sum = max(target_scores.sum(), 1)
 
         # cls loss
-        loss[1] = self.custom_bce_with_logits_loss_mse_inspired(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum
+        loss[1] = self.custom_bce_with_logits_loss(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum
 
         # bbox loss
         if fg_mask.sum():
             target_bboxes /= stride_tensor
             loss[0], loss[2] = self.bbox_loss(pred_distri, pred_bboxes, anchor_points, target_bboxes, target_scores,
                                               target_scores_sum, fg_mask)
- 
+
         loss[0] *= self.hyp.box  # box gain
         loss[1] *= self.hyp.cls  # cls gain
         loss[2] *= self.hyp.dfl  # dfl gain
